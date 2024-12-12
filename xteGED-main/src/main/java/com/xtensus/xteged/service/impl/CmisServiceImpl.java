@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 import javax.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
@@ -149,34 +150,11 @@ public class CmisServiceImpl implements CmisService {
         return parentFolder;
     }
 
+    @Override
     public ResponseEntity<String> getNodeDetails(String nodeId) {
-        if (session == null) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR); // Session is critical
-        }
-
-        try {
-            CmisObject object = session.getObject(nodeId);
-            if (object == null) {
-                return new ResponseEntity<>(HttpStatus.NOT_FOUND); // Object not found
-            }
-
-            // Convert CmisObject to JSON
-            String jsonResponse = objectMapper.writeValueAsString(object);
-            return new ResponseEntity<>(jsonResponse, HttpStatus.OK);
-        } catch (CmisBaseException e) {
-            // Log error for later diagnosis
-            // log.error("CMIS Error: {}", e.getMessage());
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (JsonProcessingException e) {
-            // Handle JSON conversion errors
-            // log.error("JSON Processing Error: {}", e.getMessage());
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            // Log error for unexpected issues
-            // log.error("Unexpected Error: {}", e.getMessage());
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return null;
     }
+
 
     @Override
     public Document createDocument(Folder folder, String name, String mimeType, byte[] content) {
@@ -205,28 +183,45 @@ public class CmisServiceImpl implements CmisService {
 
     @Override
     public Document DownloadDocument(Integer idModel, String idDocument, String model, String extension) {
-        Document document = null;
-        CmisObject doc = session.getObject("workspace://SpacesStore/" + idDocument);
-        if (doc instanceof Document) {
-            document = (Document) doc;
+        try {
+            CmisObject doc = session.getObject("workspace://SpacesStore/" + idDocument);
+            if (doc instanceof Document) {
+                return (Document) doc;
+            } else {
+                // Log if the document is not found or is of a different type
+                log.warn("Document with id {} is not found or is not a Document.", idDocument);
+                return null;
+            }
+        } catch (CmisObjectNotFoundException e) {
+            log.error("Document not found: {}", e.getMessage());
+            return null;
+        } catch (Exception e) {
+            log.error("Unexpected error while downloading document: {}", e.getMessage());
+            throw new RuntimeException("Error fetching document", e);
         }
-        return document;
     }
+
 
 
     @Override
     public String getDocumentName(String idDocument) {
-
         Document document = DownloadDocument(null, idDocument, null, null);
-        if(document != null){
-            String documentNameWithExtension =  document.getName();
+        if (document != null) {
+            String documentNameWithExtension = document.getName();
             int lastDotIndex = documentNameWithExtension.lastIndexOf('.');
-            return documentNameWithExtension.substring(0, lastDotIndex);
 
+            // Vérifiez que lastDotIndex est valide
+            if (lastDotIndex != -1) {
+                return documentNameWithExtension.substring(0, lastDotIndex);
+            } else {
+                // Si le document n'a pas d'extension, retournez le nom tel quel
+                return documentNameWithExtension;
+            }
         }
         return null;
     }
-@Override
+
+    @Override
     public DocumentDetails getDocumentDetails(String alfrescoId) {
         if (session == null) {
             return null; // Gérer correctement le cas où la session est nulle

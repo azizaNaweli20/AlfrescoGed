@@ -43,6 +43,8 @@ private ProcessService processService ;
     }
 
     // Endpoint pour créer un processus
+
+
     @PostMapping("/processes")
     public Mono<ResponseEntity<String>> createProcess(
         @RequestParam String processDefinitionKey,
@@ -53,5 +55,17 @@ private ProcessService processService ;
             .onErrorResume(error -> Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error.getMessage())));
     }
 
+/*
+    @PostMapping("/start")
+    public Mono<ResponseEntity<String>> startWorkflow(
+        @RequestParam String processDefinitionKey,
+        @RequestBody WorkflowVariables variables) {
+
+        return workflowService.startWorkflow(processDefinitionKey, variables)
+            .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response))
+            .onErrorResume(error -> Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error.getMessage())));
+    }
+
+*/
 
 }

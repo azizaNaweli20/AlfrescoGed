@@ -132,14 +132,12 @@ public class GEDControllerResource {
                 return ResponseEntity.notFound().build();
             }
 
-            String mimeType = document.getContentStreamMimeType();
-            if (mimeType.equals("application/pdf")) {
-                // Return a 404 Not Found response for PDF files
-                return ResponseEntity.notFound().build();
+            ContentStream content = document.getContentStream();
+            if (content == null) {
+                return ResponseEntity.status(HttpStatus.NO_CONTENT).body("Le document n'a pas de contenu.");
             }
 
-            ContentStream content = document.getContentStream();
-            InputStreamResource resource = new InputStreamResource(content.getStream());
+            String mimeType = document.getContentStreamMimeType();
             String name = document.getName();
 
             HttpHeaders headers = new HttpHeaders();
@@ -149,9 +147,10 @@ public class GEDControllerResource {
             return ResponseEntity.ok()
                 .headers(headers)
                 .contentLength(content.getLength())
-                .body(resource);
+                .body(new InputStreamResource(content.getStream()));
 
         } catch (Exception e) {
+            log.error("Erreur lors du téléchargement du document: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur inattendue");
         }
     }

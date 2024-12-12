@@ -2,7 +2,6 @@ package com.xtensus.xteged.service.person;
 
 public class Company {
 
-
     private String organization;
     private String address1;
     private String address2;

@@ -1,12 +1,12 @@
 package com.xtensus.xteged.web.rest.vm;
 
-import com.xtensus.xteged.service.AlfrescoService;
-import com.xtensus.xteged.service.CmisService;
-import com.xtensus.xteged.service.DocumentDetails;
+import com.xtensus.xteged.service.*;
 import com.xtensus.xteged.service.ldap.Person;
 import com.xtensus.xteged.service.person.PeopleListResponse;
+import com.xtensus.xteged.service.person.PersonEntry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -47,6 +47,9 @@ public class AlfrescoController {
         @RequestParam String role) {
         return alfrescoService.shareDocument(nodeId, userId, role);
     }
+
+
+
 
 
     @GetMapping("/mm/getPeopleList")
@@ -140,7 +143,7 @@ public class AlfrescoController {
         String newName = requestBody.get("name");
         return alfrescoService.copyNode(nodeId, targetParentId, newName);
     }
-    @PutMapping("/updete/{nodeId}")
+    @PutMapping("/shàred/{nodeId}")
     public Mono<ResponseEntity<String>> updateNode(@PathVariable String nodeId, @RequestBody String jsonRequestBody) {
         return alfrescoService.updateNode(nodeId, jsonRequestBody);
     }
@@ -168,20 +171,51 @@ public class AlfrescoController {
             return ResponseEntity.notFound().build();
         }
     }
-   @GetMapping("/bb/{nodeId}")
-    public ResponseEntity<String> getNodeDetails(@PathVariable String nodeId) {
-        return cmisService.getNodeDetails(nodeId);
+    @GetMapping("/nodes/{nodeId}")
+    public Mono<ResponseEntity<Object>> getNodeDetails(@PathVariable String nodeId,
+                                                       @RequestParam(required = false) String include,
+                                                       @RequestParam(required = false) String fields) {
+        return alfrescoService.getNodeDetails(nodeId, include, fields);
     }
 
-    @PostMapping("/persons")
-    public Mono<ResponseEntity<Person>> createPerson(@RequestBody Person person) {
-        return alfrescoService.createPerson(person)
-            .map(createdPerson -> ResponseEntity.status(201).body(createdPerson))
-            .onErrorResume(e -> Mono.just(ResponseEntity.status(500).build()));
+    @GetMapping("/nodes/{nodeId}/content")
+    public Mono<ResponseEntity<byte[]>> downloadFile(@PathVariable String nodeId) {
+        return alfrescoService.downloadFileContent(nodeId)
+            .map(content -> ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=file")
+                .body(content))
+            .onErrorResume(error -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()));
+    }
+    @GetMapping("/api/persons/{personId}")
+    public Mono<ResponseEntity<PersonneResponse>> getPerson(@PathVariable String personId) {
+        return alfrescoService.getPersonById(personId)
+            .map(personResponse -> new ResponseEntity<>(personResponse, HttpStatus.OK))
+            .onErrorResume(e -> {
+                if (e.getMessage().contains("not found")) {
+                    return Mono.just(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+                } else {
+                    return Mono.just(new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR));
+                }
+            });
     }
 
-
-
+    @PutMapping("/{personId}")
+    public Mono<ResponseEntity<PersonneResponse>> updatePerson(@PathVariable String personId,
+                                                               @RequestBody PersonneBodyUpdate bodyUpdate) {
+        return alfrescoService.updatePerson(personId, bodyUpdate)
+            .map(personResponse -> ResponseEntity.ok(personResponse))
+            .onErrorResume(e -> {
+                // Log l'erreur ici si nécessaire
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null));
+            });
+    }
+    @PostMapping("/create-person")
+    public Mono<ResponseEntity<String>> createPerson(@RequestBody PersonneRequest personRequest) {
+        return alfrescoService.createPerson(personRequest)
+            .map(response -> ResponseEntity.ok(response))
+            .onErrorResume(e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error creating person: " + e.getMessage())));
+    }
     }
 
 

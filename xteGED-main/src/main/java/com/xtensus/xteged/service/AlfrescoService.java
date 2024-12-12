@@ -1,36 +1,37 @@
 package com.xtensus.xteged.service;
+
 import com.xtensus.xteged.service.impl.CmisServiceImpl;
-import com.xtensus.xteged.service.ldap.Person;
 import com.xtensus.xteged.service.person.PeopleListResponse;
+import com.xtensus.xteged.service.person.PersonEntry;
 import org.apache.chemistry.opencmis.client.api.*;
 import org.apache.chemistry.opencmis.client.runtime.SessionFactoryImpl;
+import org.apache.chemistry.opencmis.commons.PropertyIds;
 import org.apache.chemistry.opencmis.commons.SessionParameter;
+import org.apache.chemistry.opencmis.commons.data.ContentStream;
 import org.apache.chemistry.opencmis.commons.definitions.PropertyDefinition;
 import org.apache.chemistry.opencmis.commons.definitions.TypeDefinition;
 import org.apache.chemistry.opencmis.commons.enums.BindingType;
+import org.apache.chemistry.opencmis.commons.enums.VersioningState;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisBaseException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisObjectNotFoundException;
-import org.apache.http.HttpEntity;
+import org.apache.chemistry.opencmis.commons.impl.dataobjects.ContentStreamImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.apache.chemistry.opencmis.commons.data.ContentStream;
-import org.apache.chemistry.opencmis.commons.impl.dataobjects.ContentStreamImpl;
-import org.apache.chemistry.opencmis.commons.enums.VersioningState;
-import org.apache.chemistry.opencmis.commons.PropertyIds;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.util.*;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import reactor.core.publisher.Mono;
 @Service
 public class AlfrescoService {
     private Session session;
@@ -47,9 +48,8 @@ public class AlfrescoService {
     @Value("${alfresco.repository.url}")
     private String alfrescoRepoUrl;
 
-    @Autowired
-    public AlfrescoService(WebClient webClient) {
-        this.webClient = webClient;
+    public AlfrescoService(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.baseUrl("http://localhost:8081").build(); // Assurez-vous de définir l'URL de base appropriée
     }
 
     private static final HashMap<String, String> mimeTypeMapping = new HashMap<>();
@@ -70,7 +70,8 @@ public class AlfrescoService {
         SessionFactory sessionFactory = SessionFactoryImpl.newInstance();
         this.session = sessionFactory.getRepositories(parameters).get(0).createSession();
     }
-           //////////////////deleteNode/////////////////////
+
+    //////////////////deleteNode/////////////////////
     public Mono<String> deleteNode(String nodeId, boolean permanent) {
         String url = String.format("%s/nodes/%s?permanent=%b", alfrescoUrl, nodeId, permanent);
 
@@ -82,6 +83,42 @@ public class AlfrescoService {
             .bodyToMono(Void.class)
             .then(Mono.just("Node deleted successfully"));
     }
+
+    ////////////////////////////////
+    public Mono<byte[]> downloadFileContent(String nodeId) {
+        String url = String.format("%s/nodes/%s/content", alfrescoUrl, nodeId);
+
+        return webClient.get()
+            .uri(url)
+            .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .retrieve()
+            .onStatus(HttpStatus::isError, response ->
+                response.bodyToMono(String.class)
+                    .flatMap(errorBody -> {
+                        // Log de l'erreur pour plus de détails
+                        System.err.println("Erreur lors du téléchargement : " + errorBody);
+                        return Mono.error(new RuntimeException("Failed to download file content: " + errorBody));
+                    })
+            )
+            .bodyToMono(byte[].class);
+    }
+
+    //////////////////////////////////
+public Mono<String> createPerson(PersonneRequest personRequest) {
+    String url = String.format("%s/people", alfrescoUrl);
+
+    return webClient.post()
+        .uri(url)
+        .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(BodyInserters.fromValue(personRequest))
+        .retrieve()
+        .onStatus(HttpStatus::isError, response -> response.bodyToMono(String.class)
+            .flatMap(errorBody -> Mono.error(new RuntimeException("Failed to create person: " + errorBody))))
+        .bodyToMono(String.class)
+        .map(responseBody -> "Person created successfully: " + responseBody);
+}
+
 
 
 
@@ -116,46 +153,45 @@ public class AlfrescoService {
             .bodyToMono(String.class);
     }
 
-//////////////////////////////////
-public Mono<String> getDeletedNodes(Integer maxItems, Integer skipCount, String[] include) {
-    // Construire l'URL en ajoutant les paramètres query
-    String url = String.format("%s/deleted-nodes", alfrescoUrl);
-    StringBuilder uriBuilder = new StringBuilder(url);
+    //////////////////////////////////
+    public Mono<String> getDeletedNodes(Integer maxItems, Integer skipCount, String[] include) {
+        // Construire l'URL en ajoutant les paramètres query
+        String url = String.format("%s/deleted-nodes", alfrescoUrl);
+        StringBuilder uriBuilder = new StringBuilder(url);
 
-    // Ajouter les paramètres maxItems
-    if (maxItems != null) {
-        uriBuilder.append("?maxItems=").append(maxItems);
-    }
-
-    // Ajouter les paramètres skipCount
-    if (skipCount != null) {
-        if (uriBuilder.indexOf("?") == -1) {
-            uriBuilder.append("?skipCount=").append(skipCount);
-        } else {
-            uriBuilder.append("&skipCount=").append(skipCount);
+        // Ajouter les paramètres maxItems
+        if (maxItems != null) {
+            uriBuilder.append("?maxItems=").append(maxItems);
         }
-    }
 
-    // Ajouter les paramètres include
-    if (include != null && include.length > 0) {
-        if (uriBuilder.indexOf("?") == -1) {
-            uriBuilder.append("?include=").append(String.join(",", include));
-        } else {
-            uriBuilder.append("&include=").append(String.join(",", include));
+        // Ajouter les paramètres skipCount
+        if (skipCount != null) {
+            if (uriBuilder.indexOf("?") == -1) {
+                uriBuilder.append("?skipCount=").append(skipCount);
+            } else {
+                uriBuilder.append("&skipCount=").append(skipCount);
+            }
         }
+
+        // Ajouter les paramètres include
+        if (include != null && include.length > 0) {
+            if (uriBuilder.indexOf("?") == -1) {
+                uriBuilder.append("?include=").append(String.join(",", include));
+            } else {
+                uriBuilder.append("&include=").append(String.join(",", include));
+            }
+        }
+
+        return webClient.get()
+            .uri(uriBuilder.toString())
+            .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .retrieve()
+            .onStatus(HttpStatus::isError, response -> {
+                return response.bodyToMono(String.class)
+                    .flatMap(body -> Mono.error(new RuntimeException("Failed to retrieve deleted nodes: " + body)));
+            })
+            .bodyToMono(String.class);
     }
-
-    return webClient.get()
-        .uri(uriBuilder.toString())
-        .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
-        .retrieve()
-        .onStatus(HttpStatus::isError, response -> {
-            return response.bodyToMono(String.class)
-                .flatMap(body -> Mono.error(new RuntimeException("Failed to retrieve deleted nodes: " + body)));
-        })
-        .bodyToMono(String.class);
-}
-
 
 
 //////////////////////////////////////////searchPeople//////////////////////////////////////
@@ -192,90 +228,157 @@ public Mono<String> getDeletedNodes(Integer maxItems, Integer skipCount, String[
     }
 
 
+    //////////////////////////
+    public Mono<String> shareDocument(String nodeId, String authorityId, String permission) {
+        String url = String.format("%s/nodes/%s/permissions", alfrescoUrl, nodeId);
 
+        // Corps de la requête pour mettre à jour les permissions
+        String requestBody = String.format("{\"entries\":[{\"authority\":\"%s\",\"permissions\":[\"%s\"]}]}", authorityId, permission);
 
-
-
-//////////////////////////
-public Mono<String> shareDocument(String nodeId, String authorityId, String permission) {
-    String url = String.format("%s/nodes/%s/permissions", alfrescoUrl, nodeId);
-
-    // Corps de la requête pour mettre à jour les permissions
-    String requestBody = String.format("{\"entries\":[{\"authority\":\"%s\",\"permissions\":[\"%s\"]}]}", authorityId, permission);
-
-    return webClient.put()
-        .uri(url)
-        .header("Authorization", "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
-        .header("Content-Type", "application/json")
-        .bodyValue(requestBody)
-        .retrieve()
-        .onStatus(HttpStatus::isError, response -> {
-            return Mono.error(new RuntimeException("Failed to share document: " + response.statusCode()));
-        })
-        .bodyToMono(String.class);
-}
-
-
-
-
-
-
-
-
-////////////////////////////////////////////////
-public Mono<PeopleListResponse> getPeopleList(int skipCount, int maxItems, String orderBy, String[] include, String[] fields) {
-    String url = String.format("%s/people", alfrescoUrl);
-    StringBuilder uriBuilder = new StringBuilder(url);
-
-    uriBuilder.append("?skipCount=").append(skipCount);
-    uriBuilder.append("&maxItems=").append(maxItems);
-
-    if (orderBy != null && !orderBy.trim().isEmpty()) {
-        uriBuilder.append("&orderBy=").append(orderBy);
+        return webClient.put()
+            .uri(url)
+            .header("Authorization", "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .header("Content-Type", "application/json")
+            .bodyValue(requestBody)
+            .retrieve()
+            .onStatus(HttpStatus::isError, response -> {
+                return Mono.error(new RuntimeException("Failed to share document: " + response.statusCode()));
+            })
+            .bodyToMono(String.class);
     }
 
-    if (include != null && include.length > 0) {
-        uriBuilder.append("&include=").append(String.join(",", include));
-    }
 
-    if (fields != null && fields.length > 0) {
-        uriBuilder.append("&fields=").append(String.join(",", fields));
-    }
-
-    String finalUri = uriBuilder.toString();
-    log.info("Requesting people list from URL: {}", finalUri);
-
-    return webClient.get()
-        .uri(finalUri)
-        .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
-        .retrieve()
-        .onStatus(HttpStatus::is4xxClientError, response -> {
-            String errorMessage = String.format("Client error while retrieving people list. Status code: %d", response.statusCode().value());
-            log.error(errorMessage);
-            return Mono.error(new RuntimeException(errorMessage));
-        })
-        .onStatus(HttpStatus::is5xxServerError, response -> {
-            String errorMessage = String.format("Server error while retrieving people list. Status code: %d", response.statusCode().value());
-            log.error(errorMessage);
-            return Mono.error(new RuntimeException(errorMessage));
-        })
-        .bodyToMono(PeopleListResponse.class)
-        .doOnError(e -> log.error("Error occurred while retrieving people list", e));
-}
-
-
-
-    public Mono<Person> createPerson(Person person) {
+    ////////////////////////////////////////////////
+    public Mono<PeopleListResponse> getPeopleList(int skipCount, int maxItems, String orderBy, String[] include, String[] fields) {
         String url = String.format("%s/people", alfrescoUrl);
+        StringBuilder uriBuilder = new StringBuilder(url);
 
-        return webClient.post()
+        uriBuilder.append("?skipCount=").append(skipCount);
+        uriBuilder.append("&maxItems=").append(maxItems);
+
+        if (orderBy != null && !orderBy.trim().isEmpty()) {
+            uriBuilder.append("&orderBy=").append(orderBy);
+        }
+
+        if (include != null && include.length > 0) {
+            uriBuilder.append("&include=").append(String.join(",", include));
+        }
+
+        if (fields != null && fields.length > 0) {
+            uriBuilder.append("&fields=").append(String.join(",", fields));
+        }
+
+        String finalUri = uriBuilder.toString();
+        log.info("Requesting people list from URL: {}", finalUri);
+
+        return webClient.get()
+            .uri(finalUri)
+            .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .retrieve()
+            .onStatus(HttpStatus::is4xxClientError, response -> {
+                String errorMessage = String.format("Client error while retrieving people list. Status code: %d", response.statusCode().value());
+                log.error(errorMessage);
+                return Mono.error(new RuntimeException(errorMessage));
+            })
+            .onStatus(HttpStatus::is5xxServerError, response -> {
+                String errorMessage = String.format("Server error while retrieving people list. Status code: %d", response.statusCode().value());
+                log.error(errorMessage);
+                return Mono.error(new RuntimeException(errorMessage));
+            })
+            .bodyToMono(PeopleListResponse.class)
+            .doOnError(e -> log.error("Error occurred while retrieving people list", e));
+    }
+
+
+    public Mono<ResponseEntity<Object>> getNodeDetails(String nodeId, String include, String fields) {
+        String url = String.format("%s/nodes/%s", alfrescoUrl, nodeId);
+
+        return webClient.get()
+            .uri(uriBuilder -> uriBuilder
+
+                .queryParamIfPresent("include", Optional.ofNullable(include))
+                .queryParamIfPresent("fields", Optional.ofNullable(fields))
+                .build(nodeId))
+            .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+            .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .retrieve()
+            .toEntity(Object.class) // Remplacez par votre classe de réponse
+            .doOnSuccess(response -> {
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    log.info("Received node response: {}", response.getBody());
+                }
+            })
+            .doOnError(error -> log.error("Error fetching node details: {}", error.getMessage()))
+            .onErrorResume(e -> {
+                log.error("An error occurred while fetching node details: {}", e.getMessage());
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Une erreur s'est produite"));
+            });
+    }
+
+
+
+
+
+
+
+
+
+    public Mono<PersonneResponse> getPersonById(String personId) {
+        String url = String.format("%s/people/%s", alfrescoUrl, personId);
+
+        return webClient.get()
             .uri(url)
             .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
-            .header(HttpHeaders.CONTENT_TYPE, "application/json")
-            .body(Mono.just(person), Person.class)
             .retrieve()
-            .bodyToMono(Person.class);
+            .onStatus(HttpStatus::isError, response -> {
+                log.error("Error fetching person: {}", response.statusCode());
+                return Mono.error(new RuntimeException("Failed to fetch person"));
+            })
+            .bodyToMono(PersonneResponse.class)
+            .doOnNext(personResponse -> {
+                log.info("Received person response: {}", personResponse);
+            });
     }
+/////////////////////////////////put person///////////////////////
+
+    public Mono<PersonneResponse> updatePerson(String personId, PersonneBodyUpdate bodyUpdate) {
+        String url = String.format("%s/people/%s", alfrescoUrl, personId);
+
+        return webClient.put()
+            .uri(url)
+            .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(bodyUpdate)
+            .retrieve()
+            .onStatus(HttpStatus::isError, response -> {
+                return response.bodyToMono(String.class)
+                    .flatMap(errorBody -> Mono.error(new RuntimeException("Error updating person: " + errorBody)));
+            })
+            .bodyToMono(PersonneResponse.class)
+            .doOnNext(personResponse -> {
+                // Log ou traitement après une mise à jour réussie
+                System.out.println("Successfully updated person: " + personResponse.getEntry());
+            });
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     //////////////////searchNodes//////////////////////////////////
 

@@ -41,10 +41,8 @@ public class XteGedApp {
     private String alfrescoRepositoryUrl;
 
     @Bean
-    public WebClient webClient() {
-        return WebClient.builder()
-            .baseUrl(alfrescoRepositoryUrl)
-            .build();
+    public WebClient.Builder webClientBuilder() {
+        return WebClient.builder();
     }
 
     /**

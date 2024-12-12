@@ -28,11 +28,10 @@ public class ProcessService {
     @Value("${alfresco.repository.url}")
     private String alfrescoRepoUrl;
 
-    @Autowired
-    public ProcessService(WebClient webClient) {
-        this.webClient = webClient;
-    }
 
+    public ProcessService(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.baseUrl("http://localhost:8081").build(); // Assurez-vous de définir l'URL de base appropriée
+    }
 
     public Mono<String> getProcesses(int skipCount, int maxItems, String[] properties, String[] orderBy, String where) {
         StringBuilder uriBuilder = new StringBuilder(String.format("%s/workflow/versions/1/processes", alfrescoUrl));
@@ -122,6 +121,23 @@ public class ProcessService {
             .bodyToMono(String.class);
     }
 
+/*
+    public Mono<String> startWorkflow(String processDefinitionKey, WorkflowVariables variables) {
+        String requestBody = String.format(
+            "{ \"processDefinitionKey\": \"%s\", \"variables\": { \"bpm_assignee\": \"%s\", \"bpm_sendEMailNotifications\": %b, \"bpm_workflowPriority\": %d } }",
+            processDefinitionKey,
+            variables.getBpm_assignee(),
+            variables.isBpm_sendEMailNotifications(),
+            variables.getBpm_workflowPriority()
+        );
 
-
+        return webClient.post()
+            .uri("/alfresco/api/-default-/public/workflow/versions/1/processes")
+            .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .header("Content-Type", "application/json")
+            .bodyValue(requestBody)
+            .retrieve()
+            .bodyToMono(String.class)
+            .onErrorMap(e -> new RuntimeException("Failed to start workflow", e));
+    }*/
 }

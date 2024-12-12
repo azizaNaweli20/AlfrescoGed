@@ -262,11 +262,11 @@ jhipster:
 # application:
 
 alfresco:
-  url :  http://localhost:8085/alfresco/api/-default-/public/alfresco/versions/1
+  url :  http://localhost:8080/alfresco/api/-default-/public/alfresco/versions/1
   repository:
-    url: http://localhost:8085/alfresco/api/-default-/public/cmis/versions/1.1/atom
-    user: aziza
-    pass: aziza
+    url: http://localhost:8080/alfresco/api/-default-/public/cmis/versions/1.1/atom
+    user: admin
+    pass: alfresco
 
   ldap:
     synchronization:
