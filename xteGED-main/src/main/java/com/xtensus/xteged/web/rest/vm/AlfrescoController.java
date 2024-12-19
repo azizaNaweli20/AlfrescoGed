@@ -18,7 +18,7 @@ import java.util.Map;
 
 import org.apache.chemistry.opencmis.client.api.Folder;
 import reactor.core.publisher.Mono;
-
+@CrossOrigin(origins = "http://localhost:4200")
 @RestController
 
 @RequestMapping("/api/ged-controller")
@@ -47,9 +47,15 @@ public class AlfrescoController {
         @RequestParam String role) {
         return alfrescoService.shareDocument(nodeId, userId, role);
     }
+    @GetMapping("/{nodeId}/children")
+    public Mono<ResponseEntity<Object>> getAllDocuments(
+        @PathVariable String nodeId,
+        @RequestParam(required = false, defaultValue = "properties") String include) {
 
-
-
+        return alfrescoService.getAllDocuments(nodeId, include)
+            .map(response -> ResponseEntity.ok(response))
+            .onErrorResume(e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage())));
+    }
 
 
     @GetMapping("/mm/getPeopleList")

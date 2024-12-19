@@ -49,7 +49,7 @@ public class AlfrescoService {
     private String alfrescoRepoUrl;
 
     public AlfrescoService(WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder.baseUrl("http://localhost:8081").build(); // Assurez-vous de définir l'URL de base appropriée
+        this.webClient = webClientBuilder.baseUrl("http://localhost:8080/alfresco/api/-default-/public/alfresco/versions/1").build(); // Assurez-vous de définir l'URL de base appropriée
     }
 
     private static final HashMap<String, String> mimeTypeMapping = new HashMap<>();
@@ -70,6 +70,27 @@ public class AlfrescoService {
         SessionFactory sessionFactory = SessionFactoryImpl.newInstance();
         this.session = sessionFactory.getRepositories(parameters).get(0).createSession();
     }
+////////////////////////////////////////////////////////////////////
+
+    public Mono<Object> getAllDocuments(String nodeId, String include) {
+
+        String url = String.format("/nodes/%s/children", nodeId);
+
+        return webClient.get()
+            .uri(uriBuilder -> uriBuilder
+                .path(url)
+                .queryParam("include", include)
+                .build())
+            .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .retrieve()
+            .onStatus(HttpStatus::isError, response ->
+                response.bodyToMono(String.class)
+                    .flatMap(errorBody -> Mono.error(new RuntimeException("Failed to get nodes: " + errorBody)))
+            )
+            .bodyToMono(Object.class); // Remplacez Object par un modèle spécifique si nécessaire
+    }
+
+
 
     //////////////////deleteNode/////////////////////
     public Mono<String> deleteNode(String nodeId, boolean permanent) {
@@ -483,6 +504,17 @@ public Mono<String> createPerson(PersonneRequest personRequest) {
 
 
 
+    public Mono<String> getAllDocuments(String folderId, String user, String pass) {
+        return webClient.get()
+            .uri("/nodes/{folderId}/children", folderId)
+            .header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString((alfrescoUser + ":" + alfrescoPass).getBytes()))
+            .retrieve()
+            .bodyToMono(String.class)
+            .onErrorResume(WebClientResponseException.class, ex -> {
+                return Mono.error(new RuntimeException("Failed to retrieve documents", ex));
+            });
+    }
+
 
 
 
@@ -579,6 +611,7 @@ public Mono<String> createPerson(PersonneRequest personRequest) {
             return null;
         }
     }
+
 
 
     public ResponseEntity<String> uploadFileWithAutoRename(MultipartFile file, String path, String filename, String filenameAux, int index, String authToken) throws IOException {

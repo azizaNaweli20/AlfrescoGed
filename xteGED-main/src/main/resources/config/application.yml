@@ -250,6 +250,19 @@ jhipster:
       audience:
         - account
         - api://default
+
+  cors:
+    allowed-origins:
+      - "http://localhost:4200" # Your Angular app
+    allowed-methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    allowed-headers:
+      - "*"
+    allow-credentials: true
 # ===================================================================
 # Application specific properties
 # Add your own application properties here, see the ApplicationProperties class

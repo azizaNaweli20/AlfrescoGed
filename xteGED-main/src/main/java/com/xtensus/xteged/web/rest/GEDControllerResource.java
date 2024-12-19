@@ -34,7 +34,11 @@ import reactor.core.publisher.Mono;
 /**
  * GEDControllerResource controller
  */
+
+
+@CrossOrigin(origins = "http://localhost:4200")
 @RestController
+
 @RequestMapping("/api/ged-controller")
 public class GEDControllerResource {
 
@@ -49,7 +53,6 @@ public class GEDControllerResource {
     /**
      * POST uploadDocument
      */
-
 
     @PostMapping("/upload")
     public Mono<String> uploadFile(@RequestParam("pathName") String pathName,

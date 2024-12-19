@@ -10,17 +10,68 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import tech.jhipster.config.JHipsterProperties;
 
 /**
  * Configuration of web application with Servlet 3.0 APIs.
  */
 @Configuration
-public class WebConfigurer implements ServletContextInitializer {
+@EnableMethodSecurity
+// (securedEnabled = true,
+// jsr250Enabled = true,
+// prePostEnabled = true)
+public class WebConfigurer implements WebMvcConfigurer { // extends WebSecurityConfigurerAdapter {
+
+    private final Logger log = LoggerFactory.getLogger(WebConfigurer.class);
+
+    private final Environment env;
+
+    private final JHipsterProperties jHipsterProperties;
+
+    public WebConfigurer(Environment env, JHipsterProperties jHipsterProperties) {
+        this.env = env;
+        this.jHipsterProperties = jHipsterProperties;
+    }
+
+    @Bean
+    public CorsFilter corsFilter() {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowCredentials(true);
+
+        config.addAllowedOrigin("http://localhost:4200");
+
+        config.addAllowedHeader("*");
+        config.addAllowedMethod("*");
+        source.registerCorsConfiguration("/**", config);
+        return new CorsFilter(source);
+    }
+
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+            .allowedOrigins("http://localhost:4200") // Autoriser uniquement cette origine
+            .allowedMethods("GET", "POST", "PUT", "DELETE") // Autoriser uniquement ces méthodes
+            .allowedHeaders("Authorization", "Content-Type") // Autoriser uniquement ces en-têtes
+            .allowCredentials(true); // Autoriser les cookies et l'authentification
+    }
+}
+
+
+
+
+
+
+
+    /*implements ServletContextInitializer {
 
     private final Logger log = LoggerFactory.getLogger(WebConfigurer.class);
 
@@ -41,8 +92,7 @@ public class WebConfigurer implements ServletContextInitializer {
 
         log.info("Web application fully configured");
     }
-
-    @Bean
+   @Bean
     public CorsFilter corsFilter() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = jHipsterProperties.getCors();
@@ -55,4 +105,10 @@ public class WebConfigurer implements ServletContextInitializer {
         }
         return new CorsFilter(source);
     }
-}
+
+
+
+
+
+
+}*/
